@@ -1,29 +1,11 @@
-#!/usr/bin/env node
-
-import { program } from "commander"
 import fs from "fs-extra"
 import { sync } from "glob"
 import ora from "ora"
 import shell from "shelljs"
 
-import packageJSON from "./package.json" assert { type: "json" }
-
 const getPackageFiles = (): string[] => sync("**/package.json", {
     ignore: ["**/node_modules/**/package.json", "package.json"],
 })
-
-const sortObjectAttributes = (originalObj: Record<string, string>): Record<string, string> => {
-    return Object
-        .keys(originalObj)
-        .sort()
-        .reduce(
-            (obj, key) => {
-                obj[key] = originalObj[key]
-                return obj
-            },
-            {}
-        )
-}
 
 const removeDupes = async (packageFiles: string[], packageName: string): Promise<string> => {
     let maxVersion = ""
@@ -47,7 +29,11 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
 
                 // Remove package-lock.json
                 const packageLockPath = packageFile.replace("package.json", "package-lock.json")
-                fs.unlink(packageLockPath)
+                try {
+                    fs.unlink(packageLockPath)
+                } catch (err) {
+                    // nothing to do here
+                }
 
                 // Remove node_modules folders
                 const nodeModulesPath = packageFile.replace("package.json", "node_modules")
@@ -60,13 +46,12 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
 
 const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
     const rootPackageJson = await fs.readJson("package.json")
-    rootPackageJson.dependencies[packageName] = maxVersion
-    rootPackageJson.dependencies = sortObjectAttributes(rootPackageJson.dependencies)
 
     rootPackageJson.scripts["bootstrap"] = rootPackageJson.scripts["bootstrap"].replace("--ci", "--no-ci")
     await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
 
-    shell.exec("npm install")
+    shell.exec(`npm install`)
+    shell.exec(`npm install ${packageName}@${maxVersion} --save-exact`)
 
     rootPackageJson.scripts["bootstrap"] = rootPackageJson.scripts["bootstrap"].replace("--no-ci", "--ci")
     await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
@@ -90,11 +75,4 @@ const dedupe = async (packageName: string): Promise<void> => {
     }
 }
 
-const main = async (): Promise<void> => {
-    program
-        .version(packageJSON.version)
-        .arguments("<packageName>")
-        .action(dedupe)
-    program.parse(process.argv)
-}
-void main()
+export { dedupe }
