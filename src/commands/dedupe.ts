@@ -44,17 +44,18 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
     return maxVersion
 }
 
-const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
+const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
     const rootPackageJson = await fs.readJson("package.json")
-
-    rootPackageJson.scripts["bootstrap"] = rootPackageJson.scripts["bootstrap"].replace("--ci", "--no-ci")
+    const scriptName = "bootstrap"
+    rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
     await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+}
 
-    shell.exec(`npm install`)
+const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
+    await adjustLernaBootstrap("--ci", "--no-ci")
     shell.exec(`npm install ${packageName}@${maxVersion} --save-exact`)
-
-    rootPackageJson.scripts["bootstrap"] = rootPackageJson.scripts["bootstrap"].replace("--no-ci", "--ci")
-    await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+    shell.exec(`npm install`)
+    await adjustLernaBootstrap("--no-ci", "--ci")
 }
 
 const dedupe = async (packageName: string): Promise<void> => {
