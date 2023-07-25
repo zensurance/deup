@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "deup": "./dist/deup.js"
+    "deup": "./dist/src/deup.js"
   },
   "scripts": {
     "build": "tsc",
@@ -22,7 +22,7 @@
     "shelljs": "0.8.5"
   },
   "devDependencies": {
-    "@types/node": "^20.4.2",
+    "@types/node": "^20.4.4",
     "typescript": "^5.1.6"
   }
 }
