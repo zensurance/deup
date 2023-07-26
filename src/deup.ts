@@ -9,6 +9,7 @@ const main = async (): Promise<void> => {
     program
         .version(packageJSON.version)
         .arguments("<packageName>")
+        .option("-d, --dry-run", "Dry run")
         .action(dedupe)
     program.parse(process.argv)
 }

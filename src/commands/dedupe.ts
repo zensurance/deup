@@ -1,3 +1,4 @@
+import { OptionValues } from "commander"
 import fs from "fs-extra"
 import { sync } from "glob"
 import ora from "ora"
@@ -37,7 +38,7 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
 
                 // Remove node_modules folders
                 const nodeModulesPath = packageFile.replace("package.json", "node_modules")
-                fs.rmSync(nodeModulesPath, { recursive: true, force: true });
+                fs.rmSync(nodeModulesPath, { recursive: true, force: true })
             }
         }
     }
@@ -58,7 +59,7 @@ const addToRootAndInstall = async (packageName: string, maxVersion: string): Pro
     await adjustLernaBootstrap("--no-ci", "--ci")
 }
 
-const dedupe = async (packageName: string): Promise<void> => {
+const dedupe = async (packageName: string, options: OptionValues): Promise<void> => {
     try {
         const spinner = ora("Searching package.json files...").start()
 
@@ -66,11 +67,19 @@ const dedupe = async (packageName: string): Promise<void> => {
         spinner.text = `${packageFiles.length} package.json files found`
 
         const maxVersion = await removeDupes(packageFiles, packageName)
-
-        spinner.text = `Adding ${packageName}@${maxVersion} to package.json and running npm install...`
-        await addToRootAndInstall(packageName, maxVersion)
-
-        spinner.succeed(`Dependency "${packageName}" updated and installed.`)
+        if (!maxVersion) {
+            spinner.fail(`No dependency "${packageName}" found.`)
+        } else {
+            let successMessage = `Dependency "${packageName}"`
+            if (options.dryRun) {
+                successMessage += " would be"
+            } else {
+                spinner.text = `Adding ${packageName}@${maxVersion} to package.json and running npm install...`
+                await addToRootAndInstall(packageName, maxVersion)
+                successMessage += " was"
+            }
+            spinner.succeed(`${successMessage} updated to version ${maxVersion}.`)
+        }
     } catch (error) {
         console.error(error)
     }
