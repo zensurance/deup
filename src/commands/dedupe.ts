@@ -8,7 +8,7 @@ const getPackageFiles = (): string[] => sync("**/package.json", {
     ignore: ["**/node_modules/**/package.json", "package.json"],
 })
 
-const removeDupes = async (packageFiles: string[], packageName: string): Promise<string> => {
+const removeDupes = async (options: OptionValues, packageFiles: string[], packageName: string): Promise<string> => {
     let maxVersion = ""
     const dependencyAttributes = ["dependencies", "devDependencies"]
     for (const packageFile of packageFiles) {
@@ -18,27 +18,29 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
                 const currVersion = packageJson[dependencyAttribute][packageName].replace(/^\^|~/, "")
                 maxVersion = currVersion > maxVersion ? currVersion : maxVersion
 
-                // Remove the dependency
-                delete packageJson[dependencyAttribute][packageName]
+                if (!options.dryRun) {
+                    // Remove the dependency
+                    delete packageJson[dependencyAttribute][packageName]
 
-                // Remove the dependency attribute if it's empty
-                if (!Object.values(packageJson[dependencyAttribute]).length) {
-                    delete packageJson[dependencyAttribute]
+                    // Remove the dependency attribute if it's empty
+                    if (!Object.values(packageJson[dependencyAttribute]).length) {
+                        delete packageJson[dependencyAttribute]
+                    }
+
+                    await fs.writeJson(packageFile, packageJson, { spaces: 2 })
+
+                    // Remove package-lock.json
+                    const packageLockPath = packageFile.replace("package.json", "package-lock.json")
+                    try {
+                        fs.unlink(packageLockPath)
+                    } catch (err) {
+                        // nothing to do here
+                    }
+
+                    // Remove node_modules folders
+                    const nodeModulesPath = packageFile.replace("package.json", "node_modules")
+                    fs.rmSync(nodeModulesPath, { recursive: true, force: true })
                 }
-
-                await fs.writeJson(packageFile, packageJson, { spaces: 2 })
-
-                // Remove package-lock.json
-                const packageLockPath = packageFile.replace("package.json", "package-lock.json")
-                try {
-                    fs.unlink(packageLockPath)
-                } catch (err) {
-                    // nothing to do here
-                }
-
-                // Remove node_modules folders
-                const nodeModulesPath = packageFile.replace("package.json", "node_modules")
-                fs.rmSync(nodeModulesPath, { recursive: true, force: true })
             }
         }
     }
@@ -48,8 +50,10 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
 const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
     const rootPackageJson = await fs.readJson("package.json")
     const scriptName = "bootstrap"
-    rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
-    await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+    if (rootPackageJson.scripts?.[scriptName]) {
+        rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
+        await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+    }
 }
 
 const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
@@ -66,7 +70,7 @@ const dedupe = async (packageName: string, options: OptionValues): Promise<void>
         const packageFiles = getPackageFiles()
         spinner.text = `${packageFiles.length} package.json files found`
 
-        const maxVersion = await removeDupes(packageFiles, packageName)
+        const maxVersion = await removeDupes(options, packageFiles, packageName)
         if (!maxVersion) {
             spinner.fail(`No dependency "${packageName}" found.`)
         } else {
