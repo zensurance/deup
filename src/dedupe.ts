@@ -4,6 +4,8 @@ import { sync } from "glob"
 import ora from "ora"
 import shell from "shelljs"
 
+import { getLatestVersion } from "./npm-utils.js"
+
 const getPackageFiles = (): string[] => sync("**/package.json", {
     ignore: ["**/node_modules/**/package.json", "package.json"],
 })
@@ -22,7 +24,7 @@ const removeDupes = async (options: OptionValues, packageFiles: string[], packag
                     // Remove the dependency
                     delete packageJson[dependencyAttribute][packageName]
 
-                    // Remove the dependency attribute if it's empty
+                    // Remove the dependency attribute if it"s empty
                     if (!Object.values(packageJson[dependencyAttribute]).length) {
                         delete packageJson[dependencyAttribute]
                     }
@@ -74,15 +76,18 @@ const dedupe = async (packageName: string, options: OptionValues): Promise<void>
         if (!maxVersion) {
             spinner.fail(`No dependency "${packageName}" found.`)
         } else {
+            const latestVersion = await getLatestVersion(packageName)
+            const upgradeToVersion = options.latest ? latestVersion : maxVersion
+            
             let successMessage = `Dependency "${packageName}"`
             if (options.dryRun) {
                 successMessage += " would be"
             } else {
-                spinner.text = `Adding ${packageName}@${maxVersion} to package.json and running npm install...`
-                await addToRootAndInstall(packageName, maxVersion)
+                spinner.text = `Adding ${packageName}@${upgradeToVersion} to package.json and running npm install...`
+                await addToRootAndInstall(packageName, upgradeToVersion)
                 successMessage += " was"
             }
-            spinner.succeed(`${successMessage} updated to version ${maxVersion}.`)
+            spinner.succeed(`${successMessage} updated to version ${upgradeToVersion}.`)
         }
     } catch (error) {
         console.error(error)
