@@ -1,3 +1,4 @@
+import { OptionValues } from "commander"
 import fs from "fs-extra"
 import { sync } from "glob"
 import ora from "ora"
@@ -7,7 +8,7 @@ const getPackageFiles = (): string[] => sync("**/package.json", {
     ignore: ["**/node_modules/**/package.json", "package.json"],
 })
 
-const removeDupes = async (packageFiles: string[], packageName: string): Promise<string> => {
+const removeDupes = async (options: OptionValues, packageFiles: string[], packageName: string): Promise<string> => {
     let maxVersion = ""
     const dependencyAttributes = ["dependencies", "devDependencies"]
     for (const packageFile of packageFiles) {
@@ -17,27 +18,29 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
                 const currVersion = packageJson[dependencyAttribute][packageName].replace(/^\^|~/, "")
                 maxVersion = currVersion > maxVersion ? currVersion : maxVersion
 
-                // Remove the dependency
-                delete packageJson[dependencyAttribute][packageName]
+                if (!options.dryRun) {
+                    // Remove the dependency
+                    delete packageJson[dependencyAttribute][packageName]
 
-                // Remove the dependency attribute if it's empty
-                if (!Object.values(packageJson[dependencyAttribute]).length) {
-                    delete packageJson[dependencyAttribute]
+                    // Remove the dependency attribute if it's empty
+                    if (!Object.values(packageJson[dependencyAttribute]).length) {
+                        delete packageJson[dependencyAttribute]
+                    }
+
+                    await fs.writeJson(packageFile, packageJson, { spaces: 2 })
+
+                    // Remove package-lock.json
+                    const packageLockPath = packageFile.replace("package.json", "package-lock.json")
+                    try {
+                        fs.unlink(packageLockPath)
+                    } catch (err) {
+                        // nothing to do here
+                    }
+
+                    // Remove node_modules folders
+                    const nodeModulesPath = packageFile.replace("package.json", "node_modules")
+                    fs.rmSync(nodeModulesPath, { recursive: true, force: true })
                 }
-
-                await fs.writeJson(packageFile, packageJson, { spaces: 2 })
-
-                // Remove package-lock.json
-                const packageLockPath = packageFile.replace("package.json", "package-lock.json")
-                try {
-                    fs.unlink(packageLockPath)
-                } catch (err) {
-                    // nothing to do here
-                }
-
-                // Remove node_modules folders
-                const nodeModulesPath = packageFile.replace("package.json", "node_modules")
-                fs.rmSync(nodeModulesPath, { recursive: true, force: true });
             }
         }
     }
@@ -47,8 +50,10 @@ const removeDupes = async (packageFiles: string[], packageName: string): Promise
 const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
     const rootPackageJson = await fs.readJson("package.json")
     const scriptName = "bootstrap"
-    rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
-    await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+    if (rootPackageJson.scripts?.[scriptName]) {
+        rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
+        await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
+    }
 }
 
 const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
@@ -58,19 +63,27 @@ const addToRootAndInstall = async (packageName: string, maxVersion: string): Pro
     await adjustLernaBootstrap("--no-ci", "--ci")
 }
 
-const dedupe = async (packageName: string): Promise<void> => {
+const dedupe = async (packageName: string, options: OptionValues): Promise<void> => {
     try {
         const spinner = ora("Searching package.json files...").start()
 
         const packageFiles = getPackageFiles()
         spinner.text = `${packageFiles.length} package.json files found`
 
-        const maxVersion = await removeDupes(packageFiles, packageName)
-
-        spinner.text = `Adding ${packageName}@${maxVersion} to package.json and running npm install...`
-        await addToRootAndInstall(packageName, maxVersion)
-
-        spinner.succeed(`Dependency "${packageName}" updated and installed.`)
+        const maxVersion = await removeDupes(options, packageFiles, packageName)
+        if (!maxVersion) {
+            spinner.fail(`No dependency "${packageName}" found.`)
+        } else {
+            let successMessage = `Dependency "${packageName}"`
+            if (options.dryRun) {
+                successMessage += " would be"
+            } else {
+                spinner.text = `Adding ${packageName}@${maxVersion} to package.json and running npm install...`
+                await addToRootAndInstall(packageName, maxVersion)
+                successMessage += " was"
+            }
+            spinner.succeed(`${successMessage} updated to version ${maxVersion}.`)
+        }
     } catch (error) {
         console.error(error)
     }
