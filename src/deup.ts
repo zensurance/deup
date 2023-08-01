@@ -8,7 +8,7 @@ import { main } from "./main/index.js"
 const deup = async (): Promise<void> => {
     program
         .version(packageJSON.version)
-        .arguments("<packageName>")
+        .arguments("<packageName[@version]>")
         .option("-d, --dry-run", "Dry run")
         .option("-l, --latest", "Update to the latest version")
         .action(main)

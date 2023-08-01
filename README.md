@@ -2,7 +2,7 @@
 
 Deup is an utility package to support deduplicating dependencies in a monorepo.
 
-Usage: `deup [options] <packageName>`
+Usage: `deup [options] <packageName>[@<version>]`
 
 ## Options:
 | Option | Description |

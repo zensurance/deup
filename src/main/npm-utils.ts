@@ -1,11 +1,11 @@
 import axios, { AxiosResponse } from "axios"
 
-const getNpmPackageInfo = async (packageName: string): Promise<AxiosResponse> => {
+const getNpmPackageInfo = async (packageName: string, version?: string): Promise<AxiosResponse> => {
     try {
-        const response = await axios.get(`https://registry.npmjs.org/${packageName}`)
+        const url = `https://registry.npmjs.org/${packageName}${version ? `/${version}` : ""}`
+        const response = await axios.get(url)
         return response
     } catch (error) {
-        console.error(`Error fetching latest version for ${packageName}: ${error.message}`)
         return null
     }
 }
@@ -15,4 +15,9 @@ const getLatestVersion = async (packageName: string): Promise<string | null> => 
     return response?.data?.["dist-tags"]?.latest || null
 }
 
-export { getLatestVersion }
+const isVersionValid = async (packageName: string, version: string): Promise<boolean> => {
+    const response = await getNpmPackageInfo(packageName, version)
+    return !!response
+}
+
+export { getLatestVersion, isVersionValid }
