@@ -1,73 +1,101 @@
 import { OptionValues } from "commander"
 import chalk from "chalk"
-import ora from "ora"
 
-import { getLatestVersion } from "./npm-utils.js"
+import { isVersionValid, getLatestVersion } from "./npm-utils.js"
 import { findDupes, getPackagePaths } from "./find-dupes.js"
 import { addToRootAndInstall, removeDupes } from "./dedupe.js"
 import { FoundVersion } from "./types.js"
+import { logger } from "./logger.js"
+import { resolve } from "path"
 
-const report = (foundVersions: FoundVersion[], packageName: string, spinner) => {
+const report = (foundVersions: FoundVersion[], packageName: string) => {
     const numberOfVersions = foundVersions.length
     const numberOfPackageFiles = foundVersions.reduce((acc, curr) => acc + curr.packages.length, 0)
 
-    spinner.info("")
-    spinner.warn(`Found ${chalk.red(numberOfVersions + " versions")} of ${chalk.blue(packageName)} in ${chalk.red(numberOfPackageFiles + " package.json")} files:`)
-    spinner.info("")
+    logger.info("")
+    logger.warn(`Found ${chalk.red(numberOfVersions + " versions")} of ${chalk.blue(packageName)} in ${chalk.red(numberOfPackageFiles + " package.json")} files:`)
+    logger.info("")
 
     foundVersions.forEach(({ packages, version }) => {
-        spinner.info(`${chalk.yellow(version)} in:`)
-        packages.forEach(({ path, dependencyAttribute }) => {
-            spinner.info(`  - ${path} (${chalk.blue(dependencyAttribute)})`)
+        logger.info(`${chalk.yellow(version)} in:`)
+        packages.forEach(({ name, path, dependencyAttribute }) => {
+            logger.info(`  - ${chalk.gray(name)} / ${chalk.blue(dependencyAttribute)}`)
+            logger.info(`    ${path}`)
         })
     })
 }
 
-const getUpgradeToVersion = async (foundVersions: FoundVersion[], packageName: string, options: OptionValues, spinner) => {
+const getUpgradeToVersion = async (foundVersions: FoundVersion[], dependency, options: OptionValues) => {
     const maxVersion = foundVersions[foundVersions.length - 1]?.version
 
-    const latestVersion = await getLatestVersion(packageName)
-    spinner.info("")
-    spinner.info(`Latest version in NPM is: ${chalk.green(latestVersion)}${!options.latest ? ` (use ${chalk.gray("--latest")} to update to this version)` : ""}`)
-    spinner.info("")
+    const latestVersion = await getLatestVersion(dependency.name)
+    logger.info("")
+    logger.info(`Latest version in NPM is: ${chalk.green(latestVersion)}${!options.latest ? ` (use ${chalk.gray("--latest")} to update to this version)` : ""}`)
+    logger.info("")
 
-    return options.latest ? latestVersion : maxVersion
+    return dependency.version ? dependency.version : options.latest ? latestVersion : maxVersion
 }
 
-const main = async (packageName: string, options: OptionValues): Promise<void> => {
+const resolveDependencyParam = (dependencyParam: string) => {
+    if (dependencyParam.charAt(0) === "@") {
+        const [_, name, version] = dependencyParam.split("@")
+        return { name: "@" + name, version }
+    } else {
+        const [name, version] = dependencyParam.split("@")
+        return { name, version }
+    }
+}
+
+const main = async (dependencyParam: string, options: OptionValues): Promise<void> => {
+    logger.log("Checking parameters...")
     try {
-        const spinner = ora("Searching package.json files...").start()
+        const dependency = resolveDependencyParam(dependencyParam)
 
+        if (dependency.version) {
+            if (options.latest) {
+                throw new Error("You can't use both --latest and a specific version at the same time.")
+            }
+
+            logger.log(`Checking if version ${chalk.yellow(dependency.version)} exists in NPM registry...`)
+            const isValid = await isVersionValid(dependency.name, dependency.version)
+            if (!isValid) {
+                throw new Error(`Version ${dependency.version} not found for ${dependency.name} in NPM registry.`)
+            } else {
+                logger.info(`Version ${chalk.yellow(dependency.version)} found for ${chalk.blue(dependency.name)} in NPM registry.`)
+            }
+        }
+
+        logger.log("Searching package.json files...")
         const packagePaths = getPackagePaths()
-        spinner.info(`${packagePaths.length} package.json files found`)
+        logger.info("")
+        logger.info(`${packagePaths.length} package.json files found in the project.`)
 
-        spinner.text = `Searching for ${packageName}...`
-        const foundVersions = await findDupes(packagePaths, packageName)
+        logger.log(`Searching for ${dependency.name}...`)
+        const foundVersions = await findDupes(packagePaths, dependency.name)
 
         if (!foundVersions.length) {
-            spinner.fail(`No dependency "${packageName}" found.`)
+            throw new Error(`No dependency "${dependency.name}" found in child packages.`)
         } else {
+            report(foundVersions, dependency.name)
 
-            report(foundVersions, packageName, spinner)
+            const upgradeToVersion = await getUpgradeToVersion(foundVersions, dependency, options)
 
-            const upgradeToVersion = await getUpgradeToVersion(foundVersions, packageName, options, spinner)
-
-            let successMessage = `Dependency ${chalk.blue(packageName)}`
+            let successMessage = `Dependency ${chalk.blue(dependency.name)}`
             if (options.dryRun) {
                 successMessage += " would be"
             } else {
 
-                spinner.text = `Removing dupes...`
-                removeDupes(foundVersions, packageName)
+                logger.log(`Removing dupes...`)
+                removeDupes(foundVersions, dependency.name)
 
-                spinner.text = `Adding ${packageName}@${upgradeToVersion} to package.json and running npm install...`
-                await addToRootAndInstall(packageName, upgradeToVersion)
+                logger.log(`Adding ${dependency.name}@${upgradeToVersion} to package.json and running npm install...`)
+                await addToRootAndInstall(dependency.name, upgradeToVersion)
                 successMessage += " was"
             }
-            spinner.succeed(`${successMessage} updated to version ${chalk.green(upgradeToVersion)}.`)
+            logger.succeed(`${successMessage} updated to version ${chalk.green(upgradeToVersion)}.`)
         }
     } catch (error) {
-        console.error(error)
+        logger.fail(error.message)
     }
 }
 
