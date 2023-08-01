@@ -6,6 +6,7 @@ import { findDupes, getPackagePaths } from "./find-dupes.js"
 import { addToRootAndInstall, removeDupes } from "./dedupe.js"
 import { FoundVersion } from "./types.js"
 import { logger } from "./logger.js"
+import { resolve } from "path"
 
 const report = (foundVersions: FoundVersion[], packageName: string) => {
     const numberOfVersions = foundVersions.length
@@ -18,38 +19,49 @@ const report = (foundVersions: FoundVersion[], packageName: string) => {
     foundVersions.forEach(({ packages, version }) => {
         logger.info(`${chalk.yellow(version)} in:`)
         packages.forEach(({ name, path, dependencyAttribute }) => {
-            logger.info(`  - ${chalk.gray(name)} ${path} (${chalk.blue(dependencyAttribute)})`)
+            logger.info(`  - ${chalk.gray(name)} / ${chalk.blue(dependencyAttribute)}`)
+            logger.info(`    ${path}`)
         })
     })
 }
 
-const getUpgradeToVersion = async (foundVersions: FoundVersion[], packageName: string, version: string, options: OptionValues) => {
+const getUpgradeToVersion = async (foundVersions: FoundVersion[], dependency, options: OptionValues) => {
     const maxVersion = foundVersions[foundVersions.length - 1]?.version
 
-    const latestVersion = await getLatestVersion(packageName)
+    const latestVersion = await getLatestVersion(dependency.name)
     logger.info("")
     logger.info(`Latest version in NPM is: ${chalk.green(latestVersion)}${!options.latest ? ` (use ${chalk.gray("--latest")} to update to this version)` : ""}`)
     logger.info("")
 
-    return version ? version : options.latest ? latestVersion : maxVersion
+    return dependency.version ? dependency.version : options.latest ? latestVersion : maxVersion
 }
 
-const main = async (packageInfo: string, options: OptionValues): Promise<void> => {
+const resolveDependencyParam = (dependencyParam: string) => {
+    if (dependencyParam.charAt(0) === "@") {
+        const [_, name, version] = dependencyParam.split("@")
+        return { name: "@" + name, version }
+    } else {
+        const [name, version] = dependencyParam.split("@")
+        return { name, version }
+    }
+}
+
+const main = async (dependencyParam: string, options: OptionValues): Promise<void> => {
     logger.log("Checking parameters...")
     try {
-        const [packageName, version] = packageInfo.split("@")
+        const dependency = resolveDependencyParam(dependencyParam)
 
-        if (version) {
+        if (dependency.version) {
             if (options.latest) {
                 throw new Error("You can't use both --latest and a specific version at the same time.")
             }
 
-            logger.log(`Checking if version ${chalk.yellow(version)} exists in NPM registry...`)
-            const isValid = await isVersionValid(packageName, version)
+            logger.log(`Checking if version ${chalk.yellow(dependency.version)} exists in NPM registry...`)
+            const isValid = await isVersionValid(dependency.name, dependency.version)
             if (!isValid) {
-                throw new Error(`Version ${version} not found for ${packageName} in NPM registry.`)
+                throw new Error(`Version ${dependency.version} not found for ${dependency.name} in NPM registry.`)
             } else {
-                logger.info(`Version ${chalk.yellow(version)} found for ${chalk.blue(packageName)} in NPM registry.`)
+                logger.info(`Version ${chalk.yellow(dependency.version)} found for ${chalk.blue(dependency.name)} in NPM registry.`)
             }
         }
 
@@ -58,26 +70,26 @@ const main = async (packageInfo: string, options: OptionValues): Promise<void> =
         logger.info("")
         logger.info(`${packagePaths.length} package.json files found in the project.`)
 
-        logger.log(`Searching for ${packageName}...`)
-        const foundVersions = await findDupes(packagePaths, packageName)
+        logger.log(`Searching for ${dependency.name}...`)
+        const foundVersions = await findDupes(packagePaths, dependency.name)
 
         if (!foundVersions.length) {
-            throw new Error(`No dependency "${packageName}" found in child packages.`)
+            throw new Error(`No dependency "${dependency.name}" found in child packages.`)
         } else {
-            report(foundVersions, packageName)
+            report(foundVersions, dependency.name)
 
-            const upgradeToVersion = await getUpgradeToVersion(foundVersions, packageName, version, options)
+            const upgradeToVersion = await getUpgradeToVersion(foundVersions, dependency, options)
 
-            let successMessage = `Dependency ${chalk.blue(packageName)}`
+            let successMessage = `Dependency ${chalk.blue(dependency.name)}`
             if (options.dryRun) {
                 successMessage += " would be"
             } else {
 
                 logger.log(`Removing dupes...`)
-                removeDupes(foundVersions, packageName)
+                removeDupes(foundVersions, dependency.name)
 
-                logger.log(`Adding ${packageName}@${upgradeToVersion} to package.json and running npm install...`)
-                await addToRootAndInstall(packageName, upgradeToVersion)
+                logger.log(`Adding ${dependency.name}@${upgradeToVersion} to package.json and running npm install...`)
+                await addToRootAndInstall(dependency.name, upgradeToVersion)
                 successMessage += " was"
             }
             logger.succeed(`${successMessage} updated to version ${chalk.green(upgradeToVersion)}.`)
