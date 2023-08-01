@@ -3,7 +3,7 @@
 import { program } from "commander"
 
 import packageJSON from "../package.json" assert { type: "json" }
-import { main } from "./main"
+import { main } from "./main/index.js"
 
 const deup = async (): Promise<void> => {
     program
