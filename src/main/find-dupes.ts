@@ -15,7 +15,12 @@ const findDupes = async (packagePaths: string[], packageName: string): Promise<F
         for (const dependencyAttribute of dependencyAttributes) {
             if (packageJson?.[dependencyAttribute]?.[packageName]) {
                 const version = packageJson[dependencyAttribute][packageName].replace(/^\^|~/, "")
-                return { package: { path: packageFile, dependencyAttribute }, version }
+                const packageInfo = {
+                    name: packageJson.name,
+                    path: packageFile,
+                    dependencyAttribute
+                }
+                return { package: packageInfo, version }
             }
         }
     })))

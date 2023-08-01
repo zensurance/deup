@@ -17,8 +17,8 @@ const report = (foundVersions: FoundVersion[], packageName: string) => {
 
     foundVersions.forEach(({ packages, version }) => {
         logger.info(`${chalk.yellow(version)} in:`)
-        packages.forEach(({ path, dependencyAttribute }) => {
-            logger.info(`  - ${path} (${chalk.blue(dependencyAttribute)})`)
+        packages.forEach(({ name, path, dependencyAttribute }) => {
+            logger.info(`  - ${chalk.gray(name)} ${path} (${chalk.blue(dependencyAttribute)})`)
         })
     })
 }

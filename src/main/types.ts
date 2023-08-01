@@ -1,4 +1,5 @@
 type PackageInfo = {
+    name: string,
     path: string
     dependencyAttribute: string
 }
