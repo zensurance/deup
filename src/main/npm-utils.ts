@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from "axios"
 
-const getPackageInfo = async (packageName: string): Promise<AxiosResponse> => {
+const getNpmPackageInfo = async (packageName: string): Promise<AxiosResponse> => {
     try {
         const response = await axios.get(`https://registry.npmjs.org/${packageName}`)
         return response
@@ -11,7 +11,7 @@ const getPackageInfo = async (packageName: string): Promise<AxiosResponse> => {
 }
 
 const getLatestVersion = async (packageName: string): Promise<string | null> => {
-    const response = await getPackageInfo(packageName)
+    const response = await getNpmPackageInfo(packageName)
     return response?.data?.["dist-tags"]?.latest || null
 }
 
