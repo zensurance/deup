@@ -2,7 +2,7 @@ import ora from "ora";
 
 const spinner = ora().start();
 
-const logger = {
+const DeupLogger = {
     log: (message: string) => {
         spinner.text = message
         spinner.render()
@@ -19,6 +19,12 @@ const logger = {
     warn: (message: string) => {
         spinner.warn(message)
     },
+    indent: () => {
+        spinner.indent = 4
+    },
+    unindent: () => {
+        spinner.indent = 0
+    }
 }
 
-export { logger }
+export { DeupLogger }

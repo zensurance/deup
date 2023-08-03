@@ -12,20 +12,23 @@ const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
     }
 }
 
-const addToRootAndInstall = async (packageName: string, maxVersion: string): Promise<void> => {
+const addToRoot = async (packageName: string, maxVersion: string): Promise<void> => {
+    shell.exec(`npm install ${packageName}@${maxVersion} --save-exact > /dev/null 2>&1`)
+}
+
+const install = async () => {
     await adjustLernaBootstrap("--ci", "--no-ci")
-    shell.exec(`npm install ${packageName}@${maxVersion} --save-exact`)
     shell.exec(`npm install`)
     await adjustLernaBootstrap("--no-ci", "--ci")
 }
 
 const removeDupes = async (foundVersions: FoundVersion[], packageName) => {
     // Remove all dupes
-    foundVersions.forEach(({ packages }) => {
-        packages.forEach((packageInfo) => {
-            removeDupe(packageInfo, packageName)
-        })
-    })
+    for (const foundVersion of foundVersions) {
+        for (const packageInfo of foundVersion.packages) {
+            await removeDupe(packageInfo, packageName)
+        }
+    }
 }
 
 const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
@@ -43,11 +46,7 @@ const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
 
         // Remove package-lock.json
         const packageLockPath = packageInfo.path.replace("package.json", "package-lock.json")
-        try {
-            fs.unlink(packageLockPath)
-        } catch (err) {
-            // nothing to do here
-        }
+        fs.unlink(packageLockPath, (err) => {})
 
         // Remove node_modules folders
         const nodeModulesPath = packageInfo.path.replace("package.json", "node_modules")
@@ -55,4 +54,4 @@ const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
     }
 }
 
-export { removeDupes, addToRootAndInstall }
+export { removeDupes, addToRoot, install }

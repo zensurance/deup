@@ -3,24 +3,23 @@ import chalk from "chalk"
 
 import { isVersionValid, getLatestVersion } from "./npm-utils.js"
 import { findDupes, getPackagePaths } from "./find-dupes.js"
-import { addToRootAndInstall, removeDupes } from "./dedupe.js"
+import { addToRoot, install, removeDupes } from "./dedupe.js"
 import { FoundVersion } from "./types.js"
-import { logger } from "./logger.js"
-import { resolve } from "path"
+import { DeupLogger } from "./logger.js"
 
 const report = (foundVersions: FoundVersion[], packageName: string) => {
     const numberOfVersions = foundVersions.length
     const numberOfPackageFiles = foundVersions.reduce((acc, curr) => acc + curr.packages.length, 0)
 
-    logger.info("")
-    logger.warn(`Found ${chalk.red(numberOfVersions + " versions")} of ${chalk.blue(packageName)} in ${chalk.red(numberOfPackageFiles + " package.json")} files:`)
-    logger.info("")
+    DeupLogger.info("")
+    DeupLogger.warn(`Found ${chalk.red(numberOfVersions + " versions")} of ${chalk.blue(packageName)} in ${chalk.red(numberOfPackageFiles + " package.json")} files:`)
+    DeupLogger.info("")
 
     foundVersions.forEach(({ packages, version }) => {
-        logger.info(`${chalk.yellow(version)} in:`)
+        DeupLogger.info(`${chalk.yellow(version)} in:`)
         packages.forEach(({ name, path, dependencyAttribute }) => {
-            logger.info(`  - ${chalk.gray(name)} / ${chalk.blue(dependencyAttribute)}`)
-            logger.info(`    ${path}`)
+            DeupLogger.info(`  - ${chalk.gray(name)} / ${chalk.blue(dependencyAttribute)}`)
+            DeupLogger.info(`    ${path}`)
         })
     })
 }
@@ -29,73 +28,91 @@ const getUpgradeToVersion = async (foundVersions: FoundVersion[], dependency, op
     const maxVersion = foundVersions[foundVersions.length - 1]?.version
 
     const latestVersion = await getLatestVersion(dependency.name)
-    logger.info("")
-    logger.info(`Latest version in NPM is: ${chalk.green(latestVersion)}${!options.latest ? ` (use ${chalk.gray("--latest")} to update to this version)` : ""}`)
-    logger.info("")
+    DeupLogger.info("")
+    DeupLogger.info(`Latest version in NPM is: ${chalk.green(latestVersion)}${!options.latest ? ` (use ${chalk.gray("--latest")} to update to this version)` : ""}`)
+    DeupLogger.info("")
 
     return dependency.version ? dependency.version : options.latest ? latestVersion : maxVersion
 }
 
 const resolveDependencyParam = (dependencyParam: string) => {
-    if (dependencyParam.charAt(0) === "@") {
+    if (dependencyParam.startsWith("@")) {
         const [_, name, version] = dependencyParam.split("@")
         return { name: "@" + name, version }
     } else {
         const [name, version] = dependencyParam.split("@")
-        return { name, version }
+        return { name, version, foundVersions: [], upgradeToVersion: "" }
     }
 }
 
-const main = async (dependencyParam: string, options: OptionValues): Promise<void> => {
-    logger.log("Checking parameters...")
+const main = async (dependencyParams: string[], options: OptionValues, ...others): Promise<void> => {
+    DeupLogger.log("Checking parameters...")
     try {
-        const dependency = resolveDependencyParam(dependencyParam)
+        const dependencies = dependencyParams.map(resolveDependencyParam)
 
-        if (dependency.version) {
-            if (options.latest) {
-                throw new Error("You can't use both --latest and a specific version at the same time.")
+        DeupLogger.log("Searching package.json files...")
+        const packagePaths = getPackagePaths()
+        DeupLogger.info("")
+        DeupLogger.info(`${packagePaths.length} package.json files found in the project.`)
+
+        // Check if all dependencies having a specific version are valid
+        for (const dependency of dependencies) {
+
+            DeupLogger.info("")
+            DeupLogger.info(`Deduping ${chalk.blue(dependency.name)}`)
+            DeupLogger.indent()
+
+            if (dependency.version) {
+                if (options.latest) {
+                    throw new Error("You can't use both --latest and a specific version at the same time.")
+                }
+
+                DeupLogger.log(`Checking if version ${chalk.yellow(dependency.version)} exists in NPM registry...`)
+                const isValid = await isVersionValid(dependency.name, dependency.version)
+                if (!isValid) {
+                    throw new Error(`Version ${dependency.version} not found for  in NPM registry.`)
+                } else {
+                    DeupLogger.info(`Version ${chalk.yellow(dependency.version)} found for ${chalk.blue(dependency.name)} in NPM registry.`)
+                }
             }
 
-            logger.log(`Checking if version ${chalk.yellow(dependency.version)} exists in NPM registry...`)
-            const isValid = await isVersionValid(dependency.name, dependency.version)
-            if (!isValid) {
-                throw new Error(`Version ${dependency.version} not found for ${dependency.name} in NPM registry.`)
+            DeupLogger.log(`Searching for ${dependency.name}...`)
+            dependency.foundVersions = await findDupes(packagePaths, dependency.name)
+
+            if (!dependency.foundVersions.length) {
+                DeupLogger.fail(`No dependency "${dependency.name}" found in child packages.`)
+                dependencies.splice(dependencies.indexOf(dependency), 1)
             } else {
-                logger.info(`Version ${chalk.yellow(dependency.version)} found for ${chalk.blue(dependency.name)} in NPM registry.`)
+                report(dependency.foundVersions, dependency.name)
+
+                dependency.upgradeToVersion = await getUpgradeToVersion(dependency.foundVersions, dependency, options)
             }
+            DeupLogger.unindent()
         }
 
-        logger.log("Searching package.json files...")
-        const packagePaths = getPackagePaths()
-        logger.info("")
-        logger.info(`${packagePaths.length} package.json files found in the project.`)
-
-        logger.log(`Searching for ${dependency.name}...`)
-        const foundVersions = await findDupes(packagePaths, dependency.name)
-
-        if (!foundVersions.length) {
-            throw new Error(`No dependency "${dependency.name}" found in child packages.`)
-        } else {
-            report(foundVersions, dependency.name)
-
-            const upgradeToVersion = await getUpgradeToVersion(foundVersions, dependency, options)
-
+        // Remove dupes and add to root package.json
+        DeupLogger.log(`Removing dupes...`)
+        for (const dependency of dependencies) {
             let successMessage = `Dependency ${chalk.blue(dependency.name)}`
             if (options.dryRun) {
                 successMessage += " would be"
             } else {
 
-                logger.log(`Removing dupes...`)
-                removeDupes(foundVersions, dependency.name)
+                await removeDupes(dependency.foundVersions, dependency.name)
 
-                logger.log(`Adding ${dependency.name}@${upgradeToVersion} to package.json and running npm install...`)
-                await addToRootAndInstall(dependency.name, upgradeToVersion)
+                await addToRoot(dependency.name, dependency.upgradeToVersion)
                 successMessage += " was"
             }
-            logger.succeed(`${successMessage} updated to version ${chalk.green(upgradeToVersion)}.`)
+            DeupLogger.succeed(`${successMessage} updated to version ${chalk.green(dependency.upgradeToVersion)}.`)
+        }
+
+        if (!options.dryRun) {
+            DeupLogger.log(`Applying changes...`)
+            await install()
+            DeupLogger.succeed("All changes applied.")
         }
     } catch (error) {
-        logger.fail(error.message)
+        DeupLogger.fail(error.message)
     }
 }
 
