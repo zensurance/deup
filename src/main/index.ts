@@ -38,11 +38,21 @@ const getUpgradeToVersion = async (foundVersions: FoundVersion[], dependency, op
 const resolveDependencyParam = (dependencyParam: string) => {
     if (dependencyParam.startsWith("@")) {
         const [_, name, version] = dependencyParam.split("@")
-        return { name: "@" + name, version }
+        return { name: "@" + name, version, isDevDependency: false }
     } else {
         const [name, version] = dependencyParam.split("@")
-        return { name, version, foundVersions: [], upgradeToVersion: "" }
+        return { name, version, foundVersions: [], upgradeToVersion: "", isDevDependency: false }
     }
+}
+
+const isDevDependency = (foundVersions: FoundVersion[]): boolean => {
+    let isDevDependency: boolean
+
+    foundVersions.forEach(({ packages }) => {
+        isDevDependency = packages.some(({ dependencyAttribute }) => dependencyAttribute === "devDependencies")
+    })
+
+    return isDevDependency
 }
 
 const main = async (dependencyParams: string[], options: OptionValues, ...others): Promise<void> => {
@@ -86,6 +96,8 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
                 report(dependency.foundVersions, dependency.name)
 
                 dependency.upgradeToVersion = await getUpgradeToVersion(dependency.foundVersions, dependency, options)
+
+                dependency.isDevDependency = isDevDependency(dependency.foundVersions)
             }
             DeupLogger.unindent()
         }
@@ -100,7 +112,7 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
 
                 await removeDupes(dependency.foundVersions, dependency.name)
 
-                await addToRoot(dependency.name, dependency.upgradeToVersion)
+                await addToRoot(dependency.name, dependency.upgradeToVersion, dependency.isDevDependency)
                 successMessage += " was"
             }
             DeupLogger.succeed(`${successMessage} updated to version ${chalk.green(dependency.upgradeToVersion)}.`)

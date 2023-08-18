@@ -12,8 +12,12 @@ const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
     }
 }
 
-const addToRoot = async (packageName: string, maxVersion: string): Promise<void> => {
-    shell.exec(`npm install ${packageName}@${maxVersion} --save-exact > /dev/null 2>&1`)
+const addToRoot = async (packageName: string, maxVersion: string, isDevDependency: boolean): Promise<void> => {
+    if (isDevDependency) {
+        shell.exec(`npm install ${packageName}@${maxVersion} --save-exact --save-dev > /dev/null 2>&1`)
+    } else {
+        shell.exec(`npm install ${packageName}@${maxVersion} --save-exact > /dev/null 2>&1`)
+    }
 }
 
 const install = async () => {
