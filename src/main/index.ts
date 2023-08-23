@@ -45,14 +45,14 @@ const resolveDependencyParam = (dependencyParam: string) => {
     }
 }
 
+/**
+ * Returns "true" if all dependency attributes in all found versions are of "devDependencies" type.
+ * If any are of "dependencies" type, add as "dependencies".
+ * @param foundVersions Array of objects - All versions in all packages found for "dependency"
+ * @returns Boolean
+ */
 const isDevDependency = (foundVersions: FoundVersion[]): boolean => {
-    let isDevDependency: boolean
-
-    foundVersions.forEach(({ packages }) => {
-        isDevDependency = packages.some(({ dependencyAttribute }) => dependencyAttribute === "devDependencies")
-    })
-
-    return isDevDependency
+    return foundVersions.every(({ packages }) => packages.every(({ dependencyAttribute }) => dependencyAttribute === "devDependencies"))
 }
 
 const main = async (dependencyParams: string[], options: OptionValues, ...others): Promise<void> => {
