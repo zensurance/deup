@@ -1,15 +1,17 @@
 import shell from "shelljs"
 
 import { PackageManagerHelperInterface } from "./interface"
+import { DeupLogger } from "../logger.js"
 
 class YarnHelper implements PackageManagerHelperInterface {
-    addDependency(isDevDependency: boolean, packageName: string, maxVersion: string) {
-        const saveDev = isDevDependency ? `--dev` : ""
-        shell.exec(`yarn add ${packageName}@${maxVersion} --exact ${saveDev} > /dev/null 2>&1`)
-    }
-
-    install() {
-        shell.exec("yarn")
+    addDependencies(isDevDependency: boolean, dependenciesToInstall: string, verbose: boolean) {
+        const saveAs = isDevDependency ? `--dev` : ""
+        const output = verbose ? "" : "> /dev/null 2>&1"
+        const command = `yarn add ${dependenciesToInstall} --ignore-workspace-root-check --exact ${saveAs} ${output}`
+        if (verbose) {
+            DeupLogger.log(command)
+        }
+        return shell.exec(command)
     }
 }
 

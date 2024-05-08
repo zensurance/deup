@@ -1,6 +1,5 @@
 interface PackageManagerHelperInterface {
-    addDependency(isDevDependency: boolean, packageName: string, maxVersion: string): void
-    install(): void
+    addDependencies(isDevDependency: boolean, dependenciesToInstall: string, verbose: boolean): any
 }
 
 export { PackageManagerHelperInterface }

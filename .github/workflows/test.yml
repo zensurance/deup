@@ -15,12 +15,13 @@ jobs:
         node-version: [18.x, 20.x]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.5
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4.0.2
         with:
           node-version: ${{ matrix.node-version }}
 
-      - run: pnpm install --frozen-lockfile
-
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.0.0
+    
       - run: pnpm test

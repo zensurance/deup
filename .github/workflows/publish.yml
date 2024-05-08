@@ -14,15 +14,15 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4.1.5
 
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4.0.2
       with:
         node-version: 20
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3.0.0
 
     - name: Configure git user
       run: |

@@ -114,16 +114,19 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
             } else {
 
                 await removeDupes(dependency.foundVersions, dependency.name)
-
-                packageManagerHelper.addDependency(dependency.isDevDependency, dependency.name, dependency.upgradeToVersion)
-                successMessage += " was"
+                successMessage += " will be"
             }
-            DeupLogger.succeed(`${successMessage} updated to version ${chalk.green(dependency.upgradeToVersion)}.`)
+            DeupLogger.succeed(`${successMessage} deduped to version ${chalk.green(dependency.upgradeToVersion)}.`)
         }
 
         if (!options.dryRun) {
             DeupLogger.log(`Applying changes...`)
-            // packageManagerHelper.install()
+            const isDevDependency = dependencies.every((dependency) => dependency.isDevDependency)
+            const dependenciesToInstall = dependencies.reduce((acc, curr) => `${acc} ${curr.name}@${curr.upgradeToVersion}`, "")
+            const result = packageManagerHelper.addDependencies(isDevDependency, dependenciesToInstall, options.verbose)
+            if (result.code !== 0) {
+                throw new Error(`Failed to install dependencies: ${result.stderr}`)
+            }
             DeupLogger.succeed("All changes applied.")
         }
     } catch (error) {

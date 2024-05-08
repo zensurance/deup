@@ -11,6 +11,7 @@ const deup = async (): Promise<void> => {
         .arguments("<packageName...>")
         .option("-d, --dry-run", "Dry run")
         .option("-l, --latest", "Update to the latest version")
+        .option("-v, --verbose", "Verbose output")
         .action(main)
     program.parse(process.argv)
 }
