@@ -3,9 +3,10 @@ import chalk from "chalk"
 
 import { isVersionValid, getLatestVersion } from "./npm-utils.js"
 import { findDupes, getPackagePaths } from "./find-dupes.js"
-import { addToRoot, install, removeDupes } from "./dedupe.js"
+import { removeDupes } from "./dedupe.js"
 import { FoundVersion } from "./types.js"
 import { DeupLogger } from "./logger.js"
+import { getPackageManagerHelper } from "./package-managers/index.js"
 
 const report = (foundVersions: FoundVersion[], packageName: string) => {
     const numberOfVersions = foundVersions.length
@@ -102,6 +103,8 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
             DeupLogger.unindent()
         }
 
+        const packageManagerHelper = await getPackageManagerHelper()
+
         // Remove dupes and add to root package.json
         DeupLogger.log(`Removing dupes...`)
         for (const dependency of dependencies) {
@@ -112,7 +115,7 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
 
                 await removeDupes(dependency.foundVersions, dependency.name)
 
-                await addToRoot(dependency.name, dependency.upgradeToVersion, dependency.isDevDependency)
+                packageManagerHelper.addDependency(dependency.isDevDependency, dependency.name, dependency.upgradeToVersion)
                 successMessage += " was"
             }
             DeupLogger.succeed(`${successMessage} updated to version ${chalk.green(dependency.upgradeToVersion)}.`)
@@ -120,7 +123,7 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
 
         if (!options.dryRun) {
             DeupLogger.log(`Applying changes...`)
-            await install()
+            // packageManagerHelper.install()
             DeupLogger.succeed("All changes applied.")
         }
     } catch (error) {

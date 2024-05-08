@@ -1,27 +1,6 @@
 import fs from "fs-extra"
-import shell from "shelljs"
 
 import { FoundVersion, PackageInfo } from "./types"
-
-const adjustLernaBootstrap = async (currentValue: string, newValue: string) => {
-    const rootPackageJson = await fs.readJson("package.json")
-    const scriptName = "bootstrap"
-    if (rootPackageJson.scripts?.[scriptName]) {
-        rootPackageJson.scripts[scriptName] = rootPackageJson.scripts[scriptName].replace(currentValue, newValue)
-        await fs.writeJson("package.json", rootPackageJson, { spaces: 2 })
-    }
-}
-
-const addToRoot = async (packageName: string, maxVersion: string, isDevDependency: boolean): Promise<void> => {
-    const saveDev: string = isDevDependency ? `--save-dev` : ""
-    shell.exec(`npm install ${packageName}@${maxVersion} --save-exact ${saveDev} > /dev/null 2>&1`)
-}
-
-const install = async () => {
-    await adjustLernaBootstrap("--ci", "--no-ci")
-    shell.exec(`npm install`)
-    await adjustLernaBootstrap("--no-ci", "--ci")
-}
 
 const removeDupes = async (foundVersions: FoundVersion[], packageName) => {
     // Remove all dupes
@@ -30,6 +9,11 @@ const removeDupes = async (foundVersions: FoundVersion[], packageName) => {
             await removeDupe(packageInfo, packageName)
         }
     }
+}
+
+const removeLockFile = (packagePath, lockFileName) => {
+    const packageLockPath = packagePath.replace("package.json", lockFileName)
+    fs.unlink(packageLockPath, (err) => {})
 }
 
 const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
@@ -45,9 +29,9 @@ const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
 
         await fs.writeJson(packageInfo.path, packageJson, { spaces: 2 })
 
-        // Remove package-lock.json
-        const packageLockPath = packageInfo.path.replace("package.json", "package-lock.json")
-        fs.unlink(packageLockPath, (err) => {})
+        // Remove lock files 
+        const lockFiles = ["package-lock.json", "pnpm-lock.yaml"]
+        lockFiles.map((lockFileName) => removeLockFile(packageInfo.path, lockFileName))
 
         // Remove node_modules folders
         const nodeModulesPath = packageInfo.path.replace("package.json", "node_modules")
@@ -55,4 +39,4 @@ const removeDupe = async (packageInfo: PackageInfo, packageName: string) => {
     }
 }
 
-export { removeDupes, addToRoot, install }
+export { removeDupes }
