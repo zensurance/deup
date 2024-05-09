@@ -21,6 +21,7 @@ deup [options] <packageName>[@<version>]
 | `-d, --dry-run` | Dry run |
 | `-l, --latest` | Update to the latest version |
 | `-h, --help` | display help for command |
+| `-v, --verbose` | verbose output with more information for debugging purpose |
 | `-V, --version` | output the version number |
 
 ## Example output

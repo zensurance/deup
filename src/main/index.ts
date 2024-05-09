@@ -3,9 +3,10 @@ import chalk from "chalk"
 
 import { isVersionValid, getLatestVersion } from "./npm-utils.js"
 import { findDupes, getPackagePaths } from "./find-dupes.js"
-import { addToRoot, install, removeDupes } from "./dedupe.js"
+import { removeDupes } from "./dedupe.js"
 import { FoundVersion } from "./types.js"
 import { DeupLogger } from "./logger.js"
+import { getPackageManagerHelper } from "./package-managers/index.js"
 
 const report = (foundVersions: FoundVersion[], packageName: string) => {
     const numberOfVersions = foundVersions.length
@@ -102,6 +103,8 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
             DeupLogger.unindent()
         }
 
+        const packageManagerHelper = await getPackageManagerHelper()
+
         // Remove dupes and add to root package.json
         DeupLogger.log(`Removing dupes...`)
         for (const dependency of dependencies) {
@@ -111,16 +114,19 @@ const main = async (dependencyParams: string[], options: OptionValues, ...others
             } else {
 
                 await removeDupes(dependency.foundVersions, dependency.name)
-
-                await addToRoot(dependency.name, dependency.upgradeToVersion, dependency.isDevDependency)
-                successMessage += " was"
+                successMessage += " will be"
             }
-            DeupLogger.succeed(`${successMessage} updated to version ${chalk.green(dependency.upgradeToVersion)}.`)
+            DeupLogger.succeed(`${successMessage} deduped to version ${chalk.green(dependency.upgradeToVersion)}.`)
         }
 
         if (!options.dryRun) {
             DeupLogger.log(`Applying changes...`)
-            await install()
+            const isDevDependency = dependencies.every((dependency) => dependency.isDevDependency)
+            const dependenciesToInstall = dependencies.reduce((acc, curr) => `${acc} ${curr.name}@${curr.upgradeToVersion}`, "")
+            const result = packageManagerHelper.addDependencies(isDevDependency, dependenciesToInstall, options.verbose)
+            if (result.code !== 0) {
+                throw new Error(`Failed to install dependencies: ${result.stderr}`)
+            }
             DeupLogger.succeed("All changes applied.")
         }
     } catch (error) {
